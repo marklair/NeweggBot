@@ -11,6 +11,52 @@ async function report(log) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+//check collection page
+async function scrapeCollectionPage() {
+	let browser = await puppeteer.launch({
+    	headless: false,
+		product: 'chrome',
+		defaultViewport: { width: 1500, height: 768 }
+
+	})
+	let page = await browser.newPage(); //open a new page
+	await page.goto(config.collection_url, { waitUntil: 'load' })
+	await page.waitForTimeout(3000)
+
+	// loop through product divs
+	
+	let items_details = await page.evaluate(() => {
+		let item_list = document.querySelector(".item-cells-wrap");
+		let item_panels = Array.from(item_list.children);
+
+		// Loop through each item panel and get the details 
+   		let items_info = item_panels.map(item_panel => {
+   			let item_status = item_panel.querySelector('p.item-promo') 
+            	? item_panel.querySelector('p.item-promo').innerText.trim()
+            	: 'instock';
+
+            //alert(status);
+            if (item_status != 'OUT OF STOCK') {
+            	let item_link = item_panel
+            		.querySelector('a.item-title')
+            		.getAttribute("href");
+
+            	let item_number = item_link.match(/[^\/]+$/)[0];
+            	return { item_number, item_status, item_link };
+            	//alert(item_number);	
+            }
+            
+        });
+   		return items_info;
+	});
+
+
+
+	console.log(items_details)
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 async function run() {
 
 	await report("Started")
@@ -19,6 +65,7 @@ async function run() {
         	headless: false,
 			product: 'chrome',
 			defaultViewport: { width: 1500, height: 768 }
+
 		})
 	const page = await browser.newPage()
 	await page.setCacheEnabled(false);
@@ -75,6 +122,15 @@ async function run() {
 	const startTime = new Date();
 	var nowTime = new Date();
 	var timeDiffMinutes = Math.round((nowTime - startTime) / 1000) / 60;
+
+
+	//await scrapeCollectionPage()
+
+	//await page.evaluate(() => alert('made it to here'))
+	
+
+
+
 	
 	while (true) {
 
@@ -89,28 +145,116 @@ async function run() {
 			if (page.url().includes("areyouahuman")) {
 				await page.waitForTimeout(1000)
 			}
-	
-			try {
-				await page.goto('https://secure.newegg.com/Shopping/AddtoCart.aspx?Submit=ADD&ItemList=' + config.item_number, { waitUntil: 'load' })
-				await page.waitForTimeout(1000)
+
+///////////////////////////////////////////////////////////////////////
+
+			if (!config.item_number || config.item_number.includes('none') || config.item_number.includes(',')) {
+
 				try {
-					await page.waitForSelector('#bodyArea > section > div > div > div.message.message-success.message-added > div > div.item-added.fix > div.item-added-info', {timeout: 500})
-					break
-				} catch(err) {
-					try {
-						await page.waitForSelector('#app > div.page-content > section > div > div > form > div.row-inner > div.row-body > div > div > div.item-container > div.item-qty > input', {timeout: 500})
-						break
+					await page.goto(config.collection_url, { waitUntil: 'load' })
+					await page.waitForTimeout(1000)
+
+
+					let items_details = await page.evaluate(() => {
+						let item_list = document.querySelector(".item-cells-wrap");
+						let item_panels = Array.from(item_list.children);
+
+						// Loop through each item panel and get the details 
+				   		let items_info = item_panels.map(item_panel => {
+				   			let item_status = item_panel.querySelector('p.item-promo') 
+				            	? item_panel.querySelector('p.item-promo').innerText.trim()
+				            	: 'instock';
+
+				            //alert(status);
+				            //if (item_status != 'OUT OF STOCK') {
+			            	
+			            	let item_link = item_panel
+			            		.querySelector('a.item-title')
+			            		.getAttribute("href");
+
+			            	let item_number = item_link.match(/[^\/]+$/)[0];
+			            	return { item_number, item_status };
+			            	//return { item_number, item_status, item_link };
+				            //alert(item_number);	
+				            
+				            //}
+				            
+				        });
+				   		return items_info;
+					});
+
+					console.log(items_details);
+	// get the first one in stock (probably the only one... even if we are lucky)
+					let checkout_target;
+					for(let item in items_details){
+						if (items_details[item].item_status != "OUT OF STOCK") {
+							checkout_target = items_details[item].item_number;
+							break;
+						}
+
 					}
-					catch(err) {
+
+					console.log("placing " + checkout_target + " in cart...");
+
+					if (checkout_target) {
+
 						try {
-							await page.waitForSelector('#bodyArea > div.article > form:nth-child(1) > table.shipping-group.subscription-group > tbody > tr > td:nth-child(3) > div > button:nth-child(2)', {timeout: 500})
+							await page.goto('https://secure.newegg.com/Shopping/AddtoCart.aspx?Submit=ADD&ItemList=' + checkout_target, { waitUntil: 'load' })
+							await page.waitForTimeout(1000)
+							try {
+								await page.waitForSelector('#bodyArea > section > div > div > div.message.message-success.message-added > div > div.item-added.fix > div.item-added-info', {timeout: 500})
+								break
+							} catch(err) {
+								try {
+									await page.waitForSelector('#app > div.page-content > section > div > div > form > div.row-inner > div.row-body > div > div > div.item-container > div.item-qty > input', {timeout: 500})
+									break
+								}
+								catch(err) {
+									try {
+										await page.waitForSelector('#bodyArea > div.article > form:nth-child(1) > table.shipping-group.subscription-group > tbody > tr > td:nth-child(3) > div > button:nth-child(2)', {timeout: 500})
+										break
+									}
+									catch(err) {}
+								}
+							}
+						}
+						catch(err) {}					
+					}
+					
+
+
+
+				} catch(err) {}	
+
+			} else {
+
+
+////////////////////////////////////////////////////////////////////////	
+
+
+				try {
+					await page.goto('https://secure.newegg.com/Shopping/AddtoCart.aspx?Submit=ADD&ItemList=' + config.item_number, { waitUntil: 'load' })
+					await page.waitForTimeout(1000)
+					try {
+						await page.waitForSelector('#bodyArea > section > div > div > div.message.message-success.message-added > div > div.item-added.fix > div.item-added-info', {timeout: 500})
+						break
+					} catch(err) {
+						try {
+							await page.waitForSelector('#app > div.page-content > section > div > div > form > div.row-inner > div.row-body > div > div > div.item-container > div.item-qty > input', {timeout: 500})
 							break
 						}
-						catch(err) {}
+						catch(err) {
+							try {
+								await page.waitForSelector('#bodyArea > div.article > form:nth-child(1) > table.shipping-group.subscription-group > tbody > tr > td:nth-child(3) > div > button:nth-child(2)', {timeout: 500})
+								break
+							}
+							catch(err) {}
+						}
 					}
-				}
-			} catch(err) {}
-	
+				} catch(err) {}
+
+			}
+
 			nowTime = new Date();
 			timeDiffMinutes = Math.round((nowTime - startTime) / 1000) / 60;
 
