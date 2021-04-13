@@ -11,52 +11,6 @@ async function report(log) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//check collection page
-async function scrapeCollectionPage() {
-	let browser = await puppeteer.launch({
-    	headless: false,
-		product: 'chrome',
-		defaultViewport: { width: 1500, height: 768 }
-
-	})
-	let page = await browser.newPage(); //open a new page
-	await page.goto(config.collection_url, { waitUntil: 'load' })
-	await page.waitForTimeout(3000)
-
-	// loop through product divs
-	
-	let items_details = await page.evaluate(() => {
-		let item_list = document.querySelector(".item-cells-wrap");
-		let item_panels = Array.from(item_list.children);
-
-		// Loop through each item panel and get the details 
-   		let items_info = item_panels.map(item_panel => {
-   			let item_status = item_panel.querySelector('p.item-promo') 
-            	? item_panel.querySelector('p.item-promo').innerText.trim()
-            	: 'instock';
-
-            //alert(status);
-            if (item_status != 'OUT OF STOCK') {
-            	let item_link = item_panel
-            		.querySelector('a.item-title')
-            		.getAttribute("href");
-
-            	let item_number = item_link.match(/[^\/]+$/)[0];
-            	return { item_number, item_status, item_link };
-            	//alert(item_number);	
-            }
-            
-        });
-   		return items_info;
-	});
-
-
-
-	console.log(items_details)
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 async function run() {
 
 	await report("Started")
@@ -112,7 +66,7 @@ async function run() {
 		}
 
 		else if (page.url().includes("areyouahuman")) {
-			await page.waitForTimeout(1000)
+			await page.waitForTimeout(500)
 		}
 	}
 
@@ -143,7 +97,7 @@ async function run() {
 			}
 	
 			if (page.url().includes("areyouahuman")) {
-				await page.waitForTimeout(1000)
+				await page.waitForTimeout(500)
 			}
 
 ///////////////////////////////////////////////////////////////////////
@@ -152,7 +106,7 @@ async function run() {
 
 				try {
 					await page.goto(config.collection_url, { waitUntil: 'load' })
-					await page.waitForTimeout(1000)
+					//await page.waitForTimeout(1000)
 
 
 					let items_details = await page.evaluate(() => {
@@ -164,7 +118,9 @@ async function run() {
 				   			let item_status = item_panel.querySelector('p.item-promo') 
 				            	? item_panel.querySelector('p.item-promo').innerText.trim()
 				            	: 'instock';
-
+				            let item_price_full = item_panel.querySelector('li.price-current').innerText.trim();
+				            let item_price_formatted = item_price_full.match(/\$((?:\d|\,)*\.?\d+)/g) || [];
+				            let item_price = item_price_formatted[0].replace('$', '');
 				            //alert(status);
 				            //if (item_status != 'OUT OF STOCK') {
 			            	
@@ -173,7 +129,7 @@ async function run() {
 			            		.getAttribute("href");
 
 			            	let item_number = item_link.match(/[^\/]+$/)[0];
-			            	return { item_number, item_status };
+			            	return { item_number, item_status, item_price };
 			            	//return { item_number, item_status, item_link };
 				            //alert(item_number);	
 				            
@@ -188,10 +144,16 @@ async function run() {
 					let checkout_target;
 					for(let item in items_details){
 						if (items_details[item].item_status != "OUT OF STOCK") {
-							checkout_target = items_details[item].item_number;
-							break;
+							let num_limit = Number(config.price_limit);
+							let num_price = Number(items_details[item].item_price);
+							if (num_price <= num_limit) {
+								console.log("Price comparison passed !");
+								checkout_target = items_details[item].item_number;
+								break;
+							} else {
+								console.log("Price comparison fail... :(");
+							}
 						}
-
 					}
 
 					console.log("placing " + checkout_target + " in cart...");
@@ -199,8 +161,8 @@ async function run() {
 					if (checkout_target) {
 
 						try {
-							await page.goto('https://secure.newegg.com/Shopping/AddtoCart.aspx?Submit=ADD&ItemList=' + checkout_target, { waitUntil: 'load' })
-							await page.waitForTimeout(1000)
+							page.goto('https://secure.newegg.com/Shopping/AddtoCart.aspx?Submit=ADD&ItemList=' + checkout_target, { waitUntil: 'load' })
+							await page.waitForTimeout(500)
 							try {
 								await page.waitForSelector('#bodyArea > section > div > div > div.message.message-success.message-added > div > div.item-added.fix > div.item-added-info', {timeout: 500})
 								break
@@ -233,8 +195,8 @@ async function run() {
 
 
 				try {
-					await page.goto('https://secure.newegg.com/Shopping/AddtoCart.aspx?Submit=ADD&ItemList=' + config.item_number, { waitUntil: 'load' })
-					await page.waitForTimeout(1000)
+					page.goto('https://secure.newegg.com/Shopping/AddtoCart.aspx?Submit=ADD&ItemList=' + config.item_number, { waitUntil: 'load' })
+					await page.waitForTimeout(500)
 					try {
 						await page.waitForSelector('#bodyArea > section > div > div > div.message.message-success.message-added > div > div.item-added.fix > div.item-added-info', {timeout: 500})
 						break
@@ -263,17 +225,29 @@ async function run() {
 		}
 	}
 
+
+
     await report("Item found")
-    await page.waitForTimeout(1000)
+    await page.waitForTimeout(500)
+
 
 	while (true)
 	{
-		try { // 'REMOVE ITEM(S)'
-			await page.waitForSelector('#app > div.page-content > div > div > div > div.modal-footer > button.btn.btn-secondary', {timeout: 500})
-			await page.click('#app > div.page-content > div > div > div > div.modal-footer > button.btn.btn-secondary', {timeout: 500})
+//		try { // 'REMOVE ITEM(S)'
+//			await page.waitForSelector('#app > div.page-content > div > div > div > div.modal-footer > button.btn.btn-secondary', {timeout: 500})
+//			await page.click('#app > div.page-content > div > div > div > div.modal-footer > button.btn.btn-secondary', {timeout: 500})
+//			await page.waitForTimeout(500)
+//		} 
+//		catch (err) {}
+
+
+		try { // 'DISMISS MODAL'
+			await page.waitForSelector('#app > div.page-content > div > div > div > div.modal-header > button.close', {timeout: 500})
+			await page.click('#app > div.page-content > div > div.modal-dialog > div.modal-content > div.modal-header > button.close', {timeout: 500})
 			await page.waitForTimeout(500)
 		} 
 		catch (err) {}
+
 
 		try { // at ShoppingItem url
 			await page.waitForSelector('#bodyArea > section > div > div > div.message.message-success.message-added > div > div.item-added.fix > div.item-operate > div > button.btn.btn-primary', {timeout: 500})
@@ -285,7 +259,7 @@ async function run() {
 		try {
 			await page.waitForSelector('[class="btn btn-primary btn-wide"]', {timeout: 500})
 			await page.click('[class="btn btn-primary btn-wide"]')
-			await page.waitForTimeout(1500)
+			await page.waitForTimeout(500)
 			try {
 				await page.waitForSelector('#app > header > div.header2020-inner > div.header2020-right > div:nth-child(1) > div:nth-child(2) > a', {timeout: 500})
 			}
@@ -297,7 +271,7 @@ async function run() {
 		try { 
 			await page.waitForSelector('#bodyArea > div.article > div.step-navigation > div.actions.l-right > div > a.button.button-primary.has-icon-right', {timeout: 500})
 			await page.click('#bodyArea > div.article > div.step-navigation > div.actions.l-right > div > a.button.button-primary.has-icon-right')
-			await page.waitForTimeout(1500)
+			await page.waitForTimeout(500)
 			try {
 				await page.waitForSelector('#app > header > div.header2020-inner > div.header2020-right > div:nth-child(1) > div:nth-child(2) > a', {timeout: 500})
 			}
@@ -308,7 +282,7 @@ async function run() {
 		try {
 			await page.waitForSelector('[class="button button-primary button-override has-icon-right"]', {timeout: 500})
 			await page.click('[class="button button-primary button-override has-icon-right"]')
-			await page.waitForTimeout(2000)
+			await page.waitForTimeout(500)
 			try {
 				await page.waitForSelector('#app > header > div.header2020-inner > div.header2020-right > div:nth-child(1) > div:nth-child(2) > a', {timeout: 500})
 			}
@@ -318,7 +292,7 @@ async function run() {
 	}
 
 	await report("Continued to cart")
-	await page.waitForTimeout(1000)
+	//await page.waitForTimeout(1000)
 
 	// CONTINUE TO PAYMENT
 	while(true) {
@@ -342,7 +316,7 @@ async function run() {
 	}
 
 	await report("Continued to payment")
-	await page.waitForTimeout(1000)
+	//await page.waitForTimeout(1000)
 
 	// ENTER CVV
 	while (true) {
@@ -368,7 +342,12 @@ async function run() {
 	}
 
 	await report("ccv entered")
-	await page.waitForTimeout(1000)
+	await page.waitForTimeout(500)
+
+
+	nowTime = new Date();
+	timeDiffMinutes = Math.round((nowTime - startTime) / 1000) / 60;
+	console.log("total time of transaction  - " + timeDiffMinutes + " minutes");
 
 	// CONTINUE TO ORDER REVIEW
 	while (true) {
@@ -387,7 +366,7 @@ async function run() {
 	}
 
 	await report("Continued to order review")
-	await page.waitForTimeout(1000)
+	//await page.waitForTimeout(1000)
 
 	// PLACE ORDER
 	while (config.auto_submit == "true") {
